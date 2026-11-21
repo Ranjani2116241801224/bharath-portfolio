@@ -32,6 +32,7 @@ export interface Project {
 }
 
 export interface Profile {
+  id?: string;
   name: string;
   title: string;
   smallHeading: string;

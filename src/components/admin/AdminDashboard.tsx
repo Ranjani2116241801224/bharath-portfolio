@@ -23,7 +23,8 @@ import {
   Shield,
   RefreshCw,
   Search,
-  Check
+  Check,
+  Loader2
 } from 'lucide-react';
 import {
   Profile,
@@ -69,7 +70,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose, onLogou
   // UI helpers
   const [editingProject, setEditingProject] = useState<Project | null>(null);
   const [isEditorOpen, setIsEditorOpen] = useState(false);
-  const [saveAlert, setSaveAlert] = useState<string>('');
+  const [saveAlert, setSaveAlert] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+  const [isSavingProfile, setIsSavingProfile] = useState(false);
   const [copiedSql, setCopiedSql] = useState(false);
   const [testingConnection, setTestingConnection] = useState(false);
   const [connectionResult, setConnectionResult] = useState<{ success?: boolean; message?: string }>({});
@@ -111,17 +113,26 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose, onLogou
     };
   }, []);
 
-  const showAlert = (msg: string) => {
-    setSaveAlert(msg);
-    setTimeout(() => setSaveAlert(''), 3000);
+  const showAlert = (message: string, type: 'success' | 'error' = 'success') => {
+    setSaveAlert({ message, type });
+    setTimeout(() => setSaveAlert(null), 4000);
   };
 
   // PROFILE HANDLERS
   const handleProfileSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!profile) return;
-    await StorageService.updateProfile(profile);
-    showAlert('Profile details updated successfully across the website!');
+    setIsSavingProfile(true);
+    try {
+      await StorageService.updateProfile(profile);
+      showAlert('Profile details updated and saved to Supabase successfully!', 'success');
+      await loadData();
+    } catch (err: any) {
+      console.error('Profile save error:', err);
+      showAlert(err.message || 'Error updating profile', 'error');
+    } finally {
+      setIsSavingProfile(false);
+    }
   };
 
   const handleProfilePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -132,10 +143,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose, onLogou
       const updated = { ...profile, profileImage: res.url };
       setProfile(updated);
       await StorageService.updateProfile(updated);
-      showAlert('Profile photo updated successfully!');
-    } catch (err) {
+      showAlert('Profile photo updated successfully!', 'success');
+      await loadData();
+    } catch (err: any) {
       console.error(err);
-      showAlert('Error uploading profile picture.');
+      showAlert(err.message || 'Error uploading profile picture.', 'error');
     }
   };
 
@@ -421,9 +433,19 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose, onLogou
         
         {/* Top Notification Toast */}
         {saveAlert && (
-          <div className="fixed top-6 right-6 z-50 p-4 rounded-2xl bg-emerald-500/20 border border-emerald-400 text-emerald-200 text-xs font-semibold flex items-center space-x-2 shadow-2xl animate-fadeIn">
-            <CheckCircle className="w-5 h-5 text-emerald-300" />
-            <span>{saveAlert}</span>
+          <div
+            className={`fixed top-6 right-6 z-50 p-4 rounded-2xl border text-xs font-semibold flex items-center space-x-2.5 shadow-2xl animate-fadeIn ${
+              saveAlert.type === 'success'
+                ? 'bg-emerald-500/20 border-emerald-400 text-emerald-200'
+                : 'bg-rose-500/20 border-rose-400 text-rose-200'
+            }`}
+          >
+            {saveAlert.type === 'success' ? (
+              <CheckCircle className="w-5 h-5 text-emerald-300 flex-shrink-0" />
+            ) : (
+              <AlertCircle className="w-5 h-5 text-rose-300 flex-shrink-0" />
+            )}
+            <span>{saveAlert.message}</span>
           </div>
         )}
 
@@ -653,9 +675,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose, onLogou
 
               <button
                 type="submit"
-                className="px-8 py-3 rounded-full text-xs font-bold uppercase tracking-wider text-white bg-gradient-to-r from-[#168BFF] to-[#0879D1] shadow-[0_0_20px_rgba(22,139,255,0.4)]"
+                disabled={isSavingProfile}
+                className="px-8 py-3 rounded-full text-xs font-bold uppercase tracking-wider text-white bg-gradient-to-r from-[#168BFF] to-[#0879D1] shadow-[0_0_20px_rgba(22,139,255,0.4)] disabled:opacity-50 flex items-center space-x-2"
               >
-                SAVE PROFILE CHANGES
+                {isSavingProfile ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>SAVING TO SUPABASE...</span>
+                  </>
+                ) : (
+                  <span>SAVE PROFILE CHANGES</span>
+                )}
               </button>
             </form>
           </div>

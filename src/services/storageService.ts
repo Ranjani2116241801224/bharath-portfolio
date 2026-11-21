@@ -78,15 +78,29 @@ export const StorageService = {
     const supabase = getSupabaseClient();
     if (supabase) {
       try {
-        // Query canonical profiles table
-        const { data, error } = await supabase
+        // 1. Query canonical profiles table
+        let { data, error } = await supabase
           .from('profiles')
           .select('*')
           .limit(1)
           .maybeSingle();
 
+        // 2. If profiles table has no rows or table does not exist, try legacy profile_info
+        if (!data || error) {
+          const { data: legacyData, error: legacyErr } = await supabase
+            .from('profile_info')
+            .select('*')
+            .limit(1)
+            .maybeSingle();
+          if (legacyData && !legacyErr) {
+            data = legacyData;
+            error = null;
+          }
+        }
+
         if (data && !error) {
           const profile: Profile = {
+            id: data.id,
             name: data.full_name || data.name || initialProfile.name,
             title: data.professional_title || data.title || initialProfile.title,
             smallHeading: data.small_heading || initialProfile.smallHeading,
@@ -103,7 +117,7 @@ export const StorageService = {
           return profile;
         }
       } catch (err) {
-        console.warn('Supabase profiles fetch failed, attempting fallback:', err);
+        console.warn('Supabase profiles fetch failed, attempting fallback to local store:', err);
       }
     }
     const raw = localStorage.getItem(STORAGE_KEYS.PROFILE);
@@ -111,38 +125,158 @@ export const StorageService = {
   },
 
   async updateProfile(profile: Profile): Promise<boolean> {
+    // 1. Cache immediately in localStorage
     localStorage.setItem(STORAGE_KEYS.PROFILE, JSON.stringify(profile));
-    const supabase = getSupabaseClient();
-    if (supabase) {
-      try {
-        // Find existing record ID or use constant seed ID
-        const { data: existing } = await supabase.from('profiles').select('id').limit(1).maybeSingle();
-        const profileId = existing?.id || '00000000-0000-0000-0000-000000000001';
 
-        const payload = {
-          id: profileId,
-          full_name: profile.name,
-          professional_title: profile.title,
-          description: profile.bio,
-          profile_image_url: profile.profileImage,
-          location: profile.location,
-          phone: profile.phone,
-          email: profile.email,
+    const supabase = getSupabaseClient();
+    if (!supabase) {
+      // Local/offline mode
+      window.dispatchEvent(new Event('portfolio_profile_updated'));
+      return true;
+    }
+
+    try {
+      // 2. Determine target row ID
+      let targetId = profile.id;
+
+      // If no ID on profile, check if a row already exists in profiles
+      if (!targetId) {
+        const { data: existing } = await supabase
+          .from('profiles')
+          .select('id')
+          .limit(1)
+          .maybeSingle();
+        if (existing?.id) {
+          targetId = existing.id;
+        }
+      }
+
+      // If still no ID, check currently authenticated Supabase Auth user
+      if (!targetId) {
+        try {
+          const { data: authData } = await supabase.auth.getUser();
+          if (authData?.user?.id) {
+            targetId = authData.user.id;
+          }
+        } catch {
+          // Ignore auth lookup failure
+        }
+      }
+
+      // Fallback to constant seed UUID
+      if (!targetId) {
+        targetId = '00000000-0000-0000-0000-000000000001';
+      }
+
+      profile.id = targetId;
+
+      // 3. Prepare full payload (canonical + extended compatibility fields)
+      const fullPayload: Record<string, any> = {
+        full_name: profile.name,
+        professional_title: profile.title,
+        description: profile.bio,
+        profile_image_url: profile.profileImage,
+        location: profile.location,
+        phone: profile.phone,
+        email: profile.email,
+        small_heading: profile.smallHeading,
+        tagline: profile.tagline,
+        bio: profile.bio,
+        vision: profile.vision,
+        updated_at: new Date().toISOString()
+      };
+
+      // Canonical payload with ONLY the 8 Step 1 schema columns
+      const canonicalPayload: Record<string, any> = {
+        full_name: profile.name,
+        professional_title: profile.title,
+        description: profile.bio,
+        profile_image_url: profile.profileImage,
+        location: profile.location,
+        phone: profile.phone,
+        email: profile.email,
+        updated_at: new Date().toISOString()
+      };
+
+      // Check if row exists in profiles
+      const { data: existingRow } = await supabase
+        .from('profiles')
+        .select('id')
+        .eq('id', targetId)
+        .maybeSingle();
+
+      let opError: any = null;
+
+      if (existingRow) {
+        // UPDATE existing row
+        let { error } = await supabase
+          .from('profiles')
+          .update(fullPayload)
+          .eq('id', targetId);
+
+        // If error is missing column (PGRST204)
+        if (error && (error.code === 'PGRST204' || error.message?.includes('column') || error.message?.includes('schema cache'))) {
+          const retry = await supabase
+            .from('profiles')
+            .update(canonicalPayload)
+            .eq('id', targetId);
+          error = retry.error;
+        }
+        opError = error;
+      } else {
+        // INSERT new row
+        let { error } = await supabase
+          .from('profiles')
+          .insert({ id: targetId, ...fullPayload });
+
+        // If error is missing column (PGRST204)
+        if (error && (error.code === 'PGRST204' || error.message?.includes('column') || error.message?.includes('schema cache'))) {
+          const retry = await supabase
+            .from('profiles')
+            .insert({ id: targetId, ...canonicalPayload });
+          error = retry.error;
+        }
+        opError = error;
+      }
+
+      // 4. Fallback: If table 'profiles' does not exist, try legacy 'profile_info'
+      if (opError && (opError.code === '42P01' || opError.message?.includes('relation "profiles" does not exist') || opError.message?.includes('profile_info'))) {
+        const legacyPayload = {
+          id: 'bharath_profile',
+          name: profile.name,
+          title: profile.title,
           small_heading: profile.smallHeading,
           tagline: profile.tagline,
           bio: profile.bio,
+          profile_image: profile.profileImage,
+          location: profile.location,
+          phone: profile.phone,
+          email: profile.email,
           vision: profile.vision,
           updated_at: new Date().toISOString()
         };
-
-        const { error } = await supabase.from('profiles').upsert(payload);
-        if (error) console.error('Supabase profile update error:', error);
-      } catch (err) {
-        console.warn('Supabase profile update error:', err);
+        const legacyRes = await supabase.from('profile_info').upsert(legacyPayload);
+        opError = legacyRes.error;
       }
+
+      // 5. Check if operation failed
+      if (opError) {
+        console.error('Supabase profile update error:', opError);
+        let errorMsg = opError.message || 'Database update failed';
+        if (opError.code === '42501' || opError.message?.includes('policy') || opError.message?.includes('row-level security')) {
+          errorMsg = 'Database permission denied (RLS). Please ensure you are logged in as administrator with sbarath1605@gmail.com.';
+        }
+        throw new Error(errorMsg);
+      }
+
+      // 6. Save updated ID to localStorage cache
+      localStorage.setItem(STORAGE_KEYS.PROFILE, JSON.stringify(profile));
+      window.dispatchEvent(new Event('portfolio_profile_updated'));
+      return true;
+    } catch (err: any) {
+      console.error('StorageService.updateProfile exception:', err);
+      throw err;
     }
-    window.dispatchEvent(new Event('portfolio_profile_updated'));
-    return true;
   },
 
   // ============================================================================

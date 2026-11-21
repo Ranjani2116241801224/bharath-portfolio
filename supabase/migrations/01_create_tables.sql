@@ -29,6 +29,12 @@ CREATE TABLE IF NOT EXISTS public.profiles (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now())
 );
 
+-- Ensure extended compatibility columns exist even if profiles table was created with only canonical columns
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS small_heading TEXT DEFAULT 'ASPIRING VIDEO EDITOR | VISUAL STORYTELLER';
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS tagline TEXT DEFAULT 'Turning Raw Footage Into Visual Stories.';
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS bio TEXT;
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS vision TEXT;
+
 -- 3. PROJECTS TABLE
 -- Stores portfolio items (Cinematic, Advertisement, Promotional, Social Media)
 CREATE TABLE IF NOT EXISTS public.projects (

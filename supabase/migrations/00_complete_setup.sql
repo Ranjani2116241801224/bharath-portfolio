@@ -27,6 +27,19 @@ CREATE TABLE IF NOT EXISTS public.profiles (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now())
 );
 
+-- Ensure all extended and canonical fields exist if the table was created earlier
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS professional_title TEXT DEFAULT 'JUNIOR VIDEO EDITOR';
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS description TEXT DEFAULT 'Passionate visual storyteller and junior video editor dedicated to turning raw footage into cinematic experiences.';
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS profile_image_url TEXT;
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS phone TEXT DEFAULT '+91 9585268336';
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS email TEXT DEFAULT 'sbarath1605@gmail.com';
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS location TEXT DEFAULT 'Krishnarajapuram, Bengaluru, Karnataka, India';
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS small_heading TEXT DEFAULT 'ASPIRING VIDEO EDITOR | VISUAL STORYTELLER';
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS tagline TEXT DEFAULT 'Turning Raw Footage Into Visual Stories.';
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS bio TEXT DEFAULT 'Passionate visual storyteller and junior video editor dedicated to turning raw footage into cinematic experiences. Proficient in industry-standard NLEs including Adobe Premiere Pro, DaVinci Resolve, and Final Cut Pro.';
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS vision TEXT DEFAULT 'My creative goal is to craft high-impact narrative reels, commercials, and visual stories that captivate audiences and leave lasting emotional resonance.';
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now());
+
 -- Projects table
 CREATE TABLE IF NOT EXISTS public.projects (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -152,9 +165,15 @@ SECURITY DEFINER
 SET search_path = public
 STABLE
 AS $$
-  SELECT EXISTS (
-    SELECT 1 FROM public.admin_profiles
-    WHERE id = auth.uid() AND role IN ('admin', 'super_admin')
+  SELECT (
+    -- Direct JWT cryptographic claim: User's authenticated email is Bharath's email
+    LOWER(COALESCE(auth.jwt() ->> 'email', '')) IN ('sbarath1605@gmail.com', 'admin@bharaths.com')
+    OR
+    -- Database table check: User exists in admin_profiles with admin role
+    EXISTS (
+      SELECT 1 FROM public.admin_profiles
+      WHERE id = auth.uid() AND role IN ('admin', 'super_admin')
+    )
   );
 $$;
 
@@ -182,6 +201,12 @@ CREATE TRIGGER on_auth_user_admin_created
   AFTER INSERT OR UPDATE ON auth.users
   FOR EACH ROW EXECUTE FUNCTION public.handle_admin_auth_user();
 
+-- Retroactively link existing auth users matching the admin email
+INSERT INTO public.admin_profiles (id, role)
+SELECT id, 'admin' FROM auth.users
+WHERE LOWER(email) IN ('sbarath1605@gmail.com', 'admin@bharaths.com')
+ON CONFLICT (id) DO UPDATE SET role = 'admin';
+
 -- Enable RLS
 ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.projects ENABLE ROW LEVEL SECURITY;
@@ -195,6 +220,9 @@ ALTER TABLE public.website_settings ENABLE ROW LEVEL SECURITY;
 -- Clean existing policies
 DROP POLICY IF EXISTS "Public can view profiles" ON public.profiles;
 DROP POLICY IF EXISTS "Admin can manage profiles" ON public.profiles;
+DROP POLICY IF EXISTS "Admin can insert profiles" ON public.profiles;
+DROP POLICY IF EXISTS "Admin can update profiles" ON public.profiles;
+DROP POLICY IF EXISTS "Admin can delete profiles" ON public.profiles;
 DROP POLICY IF EXISTS "Public can view published projects" ON public.projects;
 DROP POLICY IF EXISTS "Admin can manage projects" ON public.projects;
 DROP POLICY IF EXISTS "Public can view published project media" ON public.project_media;
@@ -212,7 +240,9 @@ DROP POLICY IF EXISTS "Admin can manage website settings" ON public.website_sett
 
 -- Policies for profiles
 CREATE POLICY "Public can view profiles" ON public.profiles FOR SELECT USING (true);
-CREATE POLICY "Admin can manage profiles" ON public.profiles FOR ALL TO authenticated USING (public.is_admin()) WITH CHECK (public.is_admin());
+CREATE POLICY "Admin can insert profiles" ON public.profiles FOR INSERT TO authenticated WITH CHECK (public.is_admin());
+CREATE POLICY "Admin can update profiles" ON public.profiles FOR UPDATE TO authenticated USING (public.is_admin()) WITH CHECK (public.is_admin());
+CREATE POLICY "Admin can delete profiles" ON public.profiles FOR DELETE TO authenticated USING (public.is_admin());
 
 -- Policies for projects
 CREATE POLICY "Public can view published projects" ON public.projects FOR SELECT USING (is_published = true OR public.is_admin());

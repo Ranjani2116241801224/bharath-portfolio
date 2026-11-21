@@ -13,9 +13,15 @@ SECURITY DEFINER
 SET search_path = public
 STABLE
 AS $$
-  SELECT EXISTS (
-    SELECT 1 FROM public.admin_profiles
-    WHERE id = auth.uid() AND role IN ('admin', 'super_admin')
+  SELECT (
+    -- Direct JWT cryptographic claim: User's authenticated email is Bharath's email
+    LOWER(COALESCE(auth.jwt() ->> 'email', '')) IN ('sbarath1605@gmail.com', 'admin@bharaths.com')
+    OR
+    -- Database table check: User exists in admin_profiles with admin role
+    EXISTS (
+      SELECT 1 FROM public.admin_profiles
+      WHERE id = auth.uid() AND role IN ('admin', 'super_admin')
+    )
   );
 $$;
 
@@ -45,6 +51,12 @@ CREATE TRIGGER on_auth_user_admin_created
   AFTER INSERT OR UPDATE ON auth.users
   FOR EACH ROW EXECUTE FUNCTION public.handle_admin_auth_user();
 
+-- Retroactively link existing auth users matching the admin email
+INSERT INTO public.admin_profiles (id, role)
+SELECT id, 'admin' FROM auth.users
+WHERE LOWER(email) IN ('sbarath1605@gmail.com', 'admin@bharaths.com')
+ON CONFLICT (id) DO UPDATE SET role = 'admin';
+
 -- 3. ENABLE ROW LEVEL SECURITY ON ALL TABLES
 ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.projects ENABLE ROW LEVEL SECURITY;
@@ -58,6 +70,9 @@ ALTER TABLE public.website_settings ENABLE ROW LEVEL SECURITY;
 -- 4. CLEAN UP PREVIOUS POLICIES (Idempotent execution)
 DROP POLICY IF EXISTS "Public can view profiles" ON public.profiles;
 DROP POLICY IF EXISTS "Admin can manage profiles" ON public.profiles;
+DROP POLICY IF EXISTS "Admin can insert profiles" ON public.profiles;
+DROP POLICY IF EXISTS "Admin can update profiles" ON public.profiles;
+DROP POLICY IF EXISTS "Admin can delete profiles" ON public.profiles;
 DROP POLICY IF EXISTS "Public can view published projects" ON public.projects;
 DROP POLICY IF EXISTS "Admin can manage projects" ON public.projects;
 DROP POLICY IF EXISTS "Public can view published project media" ON public.project_media;
@@ -81,11 +96,21 @@ CREATE POLICY "Public can view profiles"
   USING (true);
 
 -- Only authorized admin can insert, update, or delete profile details
-CREATE POLICY "Admin can manage profiles"
-  ON public.profiles FOR ALL
+CREATE POLICY "Admin can insert profiles"
+  ON public.profiles FOR INSERT
+  TO authenticated
+  WITH CHECK (public.is_admin());
+
+CREATE POLICY "Admin can update profiles"
+  ON public.profiles FOR UPDATE
   TO authenticated
   USING (public.is_admin())
   WITH CHECK (public.is_admin());
+
+CREATE POLICY "Admin can delete profiles"
+  ON public.profiles FOR DELETE
+  TO authenticated
+  USING (public.is_admin());
 
 -- 6. RLS POLICIES: PROJECTS TABLE
 -- Public visitors can only view published projects (Admin can view all projects)
