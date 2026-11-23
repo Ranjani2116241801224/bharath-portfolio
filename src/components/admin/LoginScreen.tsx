@@ -61,12 +61,50 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess, onClos
               return;
             }
           }
-        } catch {
-          // If Supabase Auth is offline or network error, proceed to secure verification
+
+          if (authError) {
+            console.warn('Supabase Auth signIn error:', authError);
+            const isAuthorizedEmail = cleanEmail === 'sbarath1605@gmail.com' || cleanEmail === 'admin@bharaths.com';
+            
+            // If authorized email and credentials were not found, try auto sign-up in Supabase Auth
+            if (isAuthorizedEmail && authError.message?.toLowerCase().includes('invalid login credentials')) {
+              try {
+                const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
+                  email: cleanEmail,
+                  password: password
+                });
+
+                if (!signUpError && signUpData?.session && signUpData.user) {
+                  localStorage.setItem('bharath_admin_auth', 'true');
+                  localStorage.setItem('bharath_auth_token', signUpData.session.access_token);
+                  setIsLoading(false);
+                  onLoginSuccess();
+                  return;
+                } else if (!signUpError && signUpData?.user && !signUpData.session) {
+                  setError('Administrator account registered in Supabase! If email confirmation is enabled, check your email or disable "Confirm email" in Supabase Auth settings.');
+                  setIsLoading(false);
+                  return;
+                } else if (signUpError && !signUpError.message?.toLowerCase().includes('user already registered')) {
+                  setError(`Supabase Auth Sign-Up Error: ${signUpError.message}`);
+                  setIsLoading(false);
+                  return;
+                }
+              } catch (signUpEx) {
+                console.warn('Sign up fallback exception:', signUpEx);
+              }
+            }
+
+            // Display explicit error from Supabase
+            setError(`Supabase Auth Error: ${authError.message}. Please check your administrator credentials.`);
+            setIsLoading(false);
+            return;
+          }
+        } catch (supabaseEx: any) {
+          console.warn('Supabase Auth exception:', supabaseEx);
         }
       }
 
-      // 2. Secondary: Secure verification for authorized administrator
+      // 2. Secondary: Secure verification for offline administration
       const isValid = await StorageService.verifyAdminCredentials(cleanEmail, password);
       if (isValid) {
         localStorage.setItem('bharath_admin_auth', 'true');

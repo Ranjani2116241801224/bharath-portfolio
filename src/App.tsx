@@ -16,14 +16,15 @@ import { Footer } from './components/Footer';
 import { LoginScreen } from './components/admin/LoginScreen';
 import { AdminDashboard } from './components/admin/AdminDashboard';
 import { StorageService } from './services/storageService';
-import { Profile, Project, ResumeData, SocialLink } from './types';
-import { initialProfile, initialProjects, initialResume, initialSocialLinks } from './data/initialData';
+import { Profile, Project, ResumeData, SocialLink, TechnicalSkill } from './types';
+import { initialProfile, initialProjects, initialResume, initialSocialLinks, initialSkills } from './data/initialData';
 
 export function App() {
   const [profile, setProfile] = useState<Profile>(initialProfile);
   const [projects, setProjects] = useState<Project[]>(initialProjects);
   const [resume, setResume] = useState<ResumeData>(initialResume);
   const [socialLinks, setSocialLinks] = useState<SocialLink[]>(initialSocialLinks);
+  const [skills, setSkills] = useState<TechnicalSkill[]>(initialSkills);
 
   // Modals & Navigation
   const [activeVideoProject, setActiveVideoProject] = useState<Project | null>(null);
@@ -39,11 +40,13 @@ export function App() {
       const pr = await StorageService.getProjects();
       const r = await StorageService.getResume();
       const s = await StorageService.getSocialLinks();
+      const sk = await StorageService.getSkills();
 
       setProfile(p);
       setProjects(pr);
       setResume(r);
       setSocialLinks(s);
+      setSkills(sk);
     } catch (err) {
       console.warn('Data reload failed', err);
     }
@@ -52,22 +55,32 @@ export function App() {
   useEffect(() => {
     reloadData();
 
-    // Listen for updates from Admin actions
+    // 1. Supabase Realtime live sync across public visitors and admin
+    const unsubRealtime = StorageService.subscribeToRealtime((table) => {
+      console.log('⚡ Live Realtime sync received from Supabase:', table);
+      reloadData();
+    });
+
+    // 2. Listen for local events dispatched from admin actions in current tab
     const handleProfileUpdate = () => reloadData();
     const handleProjectsUpdate = () => reloadData();
     const handleResumeUpdate = () => reloadData();
     const handleSocialUpdate = () => reloadData();
+    const handleSkillsUpdate = () => reloadData();
 
     window.addEventListener('portfolio_profile_updated', handleProfileUpdate);
     window.addEventListener('portfolio_projects_updated', handleProjectsUpdate);
     window.addEventListener('portfolio_resume_updated', handleResumeUpdate);
     window.addEventListener('portfolio_social_updated', handleSocialUpdate);
+    window.addEventListener('portfolio_skills_updated', handleSkillsUpdate);
 
     return () => {
+      if (unsubRealtime) unsubRealtime();
       window.removeEventListener('portfolio_profile_updated', handleProfileUpdate);
       window.removeEventListener('portfolio_projects_updated', handleProjectsUpdate);
       window.removeEventListener('portfolio_resume_updated', handleResumeUpdate);
       window.removeEventListener('portfolio_social_updated', handleSocialUpdate);
+      window.removeEventListener('portfolio_skills_updated', handleSkillsUpdate);
     };
   }, []);
 
@@ -116,7 +129,7 @@ export function App() {
         <Services />
 
         {/* 7. TECHNICAL SKILLS (MY CREATIVE TOOLKIT) */}
-        <Skills />
+        <Skills skills={skills} />
 
         {/* 8. PERSONAL STRENGTHS (MY STRENGTHS) */}
         <Strengths />

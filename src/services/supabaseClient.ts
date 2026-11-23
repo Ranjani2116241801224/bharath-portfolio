@@ -6,13 +6,20 @@ const envKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
 
 let clientInstance: SupabaseClient | null = null;
 
-export function getSupabaseClient(customUrl?: string, customKey?: string): SupabaseClient | null {
-  const url = customUrl || localStorage.getItem('bharath_supabase_url') || envUrl;
-  const key = customKey || localStorage.getItem('bharath_supabase_anon_key') || envKey;
+function sanitizeUrl(rawUrl: string): string {
+  return rawUrl.trim().replace(/\/rest\/v1\/?$/, '').replace(/\/+$/, '');
+}
 
-  if (!url || !key) {
+export function getSupabaseClient(customUrl?: string, customKey?: string): SupabaseClient | null {
+  const rawUrl = customUrl || localStorage.getItem('bharath_supabase_url') || envUrl;
+  const rawKey = customKey || localStorage.getItem('bharath_supabase_anon_key') || envKey;
+
+  if (!rawUrl || !rawKey) {
     return null;
   }
+
+  const url = sanitizeUrl(rawUrl);
+  const key = rawKey.trim();
 
   try {
     if (!clientInstance || customUrl || customKey) {
@@ -32,7 +39,9 @@ export function getSupabaseClient(customUrl?: string, customKey?: string): Supab
 
 export async function testSupabaseConnection(url: string, key: string): Promise<{ success: boolean; message: string }> {
   try {
-    const testClient = createClient(url, key);
+    const cleanUrl = sanitizeUrl(url);
+    const cleanKey = key.trim();
+    const testClient = createClient(cleanUrl, cleanKey);
     // Check canonical profiles table
     const { error } = await testClient.from('profiles').select('id', { count: 'exact', head: true });
     

@@ -5,22 +5,28 @@ import {
   ResumeData,
   SocialLink,
   ContactMessage,
-  WebsiteSettings
+  WebsiteSettings,
+  TechnicalSkill
 } from '../types';
 import {
   initialProfile,
   initialProjects,
   initialResume,
   initialSocialLinks,
-  initialSettings
+  initialSettings,
+  initialSkills
 } from '../data/initialData';
 import { getSupabaseClient } from './supabaseClient';
+
+export const PORTFOLIO_PROFILE_ID = '00000000-0000-0000-0000-000000000001';
+export const ADMIN_AUTH_UUID = 'e2de21ab-3253-4692-a875-cd733ba3de4d';
 
 const STORAGE_KEYS = {
   PROFILE: 'bharath_portfolio_profile',
   PROJECTS: 'bharath_portfolio_projects',
   RESUME: 'bharath_portfolio_resume',
   SOCIAL_LINKS: 'bharath_portfolio_social_links',
+  SKILLS: 'bharath_portfolio_skills',
   MESSAGES: 'bharath_portfolio_messages',
   SETTINGS: 'bharath_portfolio_settings',
   LAST_MESSAGE_TIME: 'bharath_last_msg_timestamp'
@@ -125,46 +131,41 @@ export const StorageService = {
   },
 
   async updateProfile(profile: Profile): Promise<boolean> {
-    // 1. Cache immediately in localStorage
-    localStorage.setItem(STORAGE_KEYS.PROFILE, JSON.stringify(profile));
-
     const supabase = getSupabaseClient();
     if (!supabase) {
       // Local/offline mode
+      localStorage.setItem(STORAGE_KEYS.PROFILE, JSON.stringify(profile));
       window.dispatchEvent(new Event('portfolio_profile_updated'));
       return true;
     }
 
     try {
-      // 2. Determine target row ID
-      let targetId = profile.id;
+      // 1. Verify that an active Supabase Auth session exists
+      const { data: sessionData } = await supabase.auth.getSession();
+      const currentSession = sessionData?.session;
+      const currentUser = currentSession?.user;
 
-      // If no ID on profile, check if a row already exists in profiles
-      if (!targetId) {
-        const { data: existing } = await supabase
-          .from('profiles')
-          .select('id')
-          .limit(1)
-          .maybeSingle();
-        if (existing?.id) {
-          targetId = existing.id;
-        }
+      if (!currentSession || !currentUser) {
+        throw new Error(
+          'Supabase Auth session not found. You are not logged in with an active Supabase session. Please sign in with administrator credentials (sbarath1605@gmail.com) to save changes to the database.'
+        );
       }
 
-      // If still no ID, check currently authenticated Supabase Auth user
-      if (!targetId) {
-        try {
-          const { data: authData } = await supabase.auth.getUser();
-          if (authData?.user?.id) {
-            targetId = authData.user.id;
-          }
-        } catch {
-          // Ignore auth lookup failure
-        }
-      }
+      // 2. Determine target row ID: Query existing profile row in Supabase
+      const { data: existingRows } = await supabase
+        .from('profiles')
+        .select('id')
+        .order('created_at', { ascending: true })
+        .limit(1);
 
-      // Fallback to constant seed UUID
-      if (!targetId) {
+      let targetId: string;
+      const existingRow = existingRows && existingRows.length > 0 ? existingRows[0] : null;
+
+      if (existingRow?.id) {
+        targetId = existingRow.id;
+      } else if (profile.id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(profile.id)) {
+        targetId = profile.id;
+      } else {
         targetId = '00000000-0000-0000-0000-000000000001';
       }
 
@@ -197,13 +198,6 @@ export const StorageService = {
         email: profile.email,
         updated_at: new Date().toISOString()
       };
-
-      // Check if row exists in profiles
-      const { data: existingRow } = await supabase
-        .from('profiles')
-        .select('id')
-        .eq('id', targetId)
-        .maybeSingle();
 
       let opError: any = null;
 
@@ -262,9 +256,14 @@ export const StorageService = {
       // 5. Check if operation failed
       if (opError) {
         console.error('Supabase profile update error:', opError);
-        let errorMsg = opError.message || 'Database update failed';
-        if (opError.code === '42501' || opError.message?.includes('policy') || opError.message?.includes('row-level security')) {
-          errorMsg = 'Database permission denied (RLS). Please ensure you are logged in as administrator with sbarath1605@gmail.com.';
+        const code = opError.code ? `[Code: ${opError.code}] ` : '';
+        const details = opError.details ? ` Details: ${opError.details}` : '';
+        const hint = opError.hint ? ` Hint: ${opError.hint}` : '';
+        const message = opError.message || 'Database update failed';
+        
+        let errorMsg = `${code}${message}${details}${hint}`;
+        if (opError.code === '42501' || opError.message?.includes('policy') || opError.message?.includes('row-level security') || opError.message?.includes('permission denied')) {
+          errorMsg = `Database permission denied (RLS) [Code: ${opError.code || '42501'}]: ${opError.message}.${details} (User: ${currentUser?.email || 'Unknown'}). Please verify your account is registered as admin in Supabase and the latest RLS policies are applied.`;
         }
         throw new Error(errorMsg);
       }
@@ -295,7 +294,7 @@ export const StorageService = {
           .eq('is_published', true)
           .order('display_order', { ascending: true });
 
-        if (data && !error && data.length > 0) {
+        if (!error && Array.isArray(data)) {
           const mapped: Project[] = data.map((item: any) => ({
             id: item.id,
             title: item.title,
@@ -342,7 +341,7 @@ export const StorageService = {
           `)
           .order('display_order', { ascending: true });
 
-        if (data && !error && data.length > 0) {
+        if (!error && Array.isArray(data)) {
           const mapped: Project[] = data.map((item: any) => ({
             id: item.id,
             title: item.title,
@@ -952,5 +951,139 @@ export const StorageService = {
   async getVideos(): Promise<Project[]> {
     const all = await this.getAllProjectsAdmin();
     return all.filter(p => p.mediaType === 'video' || (p.videoUrl && p.videoUrl.length > 0));
+  },
+
+  // ============================================================================
+  // 7. TECHNICAL SKILLS MANAGEMENT
+  // ============================================================================
+  async getSkills(): Promise<TechnicalSkill[]> {
+    const supabase = getSupabaseClient();
+    if (supabase) {
+      try {
+        const { data, error } = await supabase
+          .from('skills')
+          .select('*')
+          .order('display_order', { ascending: true });
+
+        if (!error && Array.isArray(data) && data.length > 0) {
+          const mapped: TechnicalSkill[] = data.map((s: any) => ({
+            id: s.id,
+            software: s.software,
+            category: s.category,
+            description: s.description,
+            iconName: s.icon_name || 'Scissors',
+            topics: Array.isArray(s.topics) ? s.topics : []
+          }));
+          localStorage.setItem(STORAGE_KEYS.SKILLS, JSON.stringify(mapped));
+          return mapped;
+        }
+      } catch (err) {
+        console.warn('Supabase skills fetch error, fallback to cache:', err);
+      }
+    }
+    const raw = localStorage.getItem(STORAGE_KEYS.SKILLS);
+    return raw ? JSON.parse(raw) : initialSkills;
+  },
+
+  async saveSkill(skill: TechnicalSkill): Promise<boolean> {
+    const raw = localStorage.getItem(STORAGE_KEYS.SKILLS);
+    const skills: TechnicalSkill[] = raw ? JSON.parse(raw) : [...initialSkills];
+    const idx = skills.findIndex(s => s.id === skill.id);
+    if (idx >= 0) {
+      skills[idx] = skill;
+    } else {
+      skills.push(skill);
+    }
+    localStorage.setItem(STORAGE_KEYS.SKILLS, JSON.stringify(skills));
+
+    const supabase = getSupabaseClient();
+    if (supabase) {
+      try {
+        const { error } = await supabase.from('skills').upsert({
+          id: skill.id,
+          software: skill.software,
+          category: skill.category,
+          description: skill.description,
+          icon_name: skill.iconName,
+          topics: skill.topics,
+          updated_at: new Date().toISOString()
+        });
+        if (error) console.error('Supabase skill upsert error:', error);
+      } catch (err) {
+        console.warn('Supabase save skill error:', err);
+      }
+    }
+    window.dispatchEvent(new Event('portfolio_skills_updated'));
+    return true;
+  },
+
+  async deleteSkill(id: string): Promise<boolean> {
+    const raw = localStorage.getItem(STORAGE_KEYS.SKILLS);
+    const skills: TechnicalSkill[] = raw ? JSON.parse(raw) : [...initialSkills];
+    const filtered = skills.filter(s => s.id !== id);
+    localStorage.setItem(STORAGE_KEYS.SKILLS, JSON.stringify(filtered));
+
+    const supabase = getSupabaseClient();
+    if (supabase) {
+      try {
+        const { error } = await supabase.from('skills').delete().eq('id', id);
+        if (error) console.error('Supabase skill delete error:', error);
+      } catch (err) {
+        console.warn('Supabase delete skill error:', err);
+      }
+    }
+    window.dispatchEvent(new Event('portfolio_skills_updated'));
+    return true;
+  },
+
+  // ============================================================================
+  // 8. SUPABASE REALTIME SUBSCRIPTION
+  // ============================================================================
+  subscribeToRealtime(onUpdate: (table: string) => void): (() => void) | null {
+    const supabase = getSupabaseClient();
+    if (!supabase) return null;
+
+    try {
+      const channel = supabase
+        .channel('portfolio_realtime_channel')
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'profiles' },
+          () => onUpdate('profiles')
+        )
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'projects' },
+          () => onUpdate('projects')
+        )
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'project_media' },
+          () => onUpdate('project_media')
+        )
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'social_links' },
+          () => onUpdate('social_links')
+        )
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'resumes' },
+          () => onUpdate('resumes')
+        )
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'skills' },
+          () => onUpdate('skills')
+        )
+        .subscribe();
+
+      return () => {
+        supabase.removeChannel(channel);
+      };
+    } catch (err) {
+      console.warn('Supabase Realtime subscription error:', err);
+      return null;
+    }
   }
 };

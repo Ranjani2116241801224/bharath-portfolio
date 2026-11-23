@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Sparkles, Scissors, Wand2, Palette, Mic, CheckCircle2 } from 'lucide-react';
+import { TechnicalSkill } from '../types';
 import { initialSkills } from '../data/initialData';
 import { Card3D } from './Card3D';
 
@@ -10,8 +11,13 @@ const iconMap: Record<string, React.ElementType> = {
   Mic
 };
 
-export const Skills: React.FC = () => {
-  const [selectedSkill, setSelectedSkill] = useState<string>(initialSkills[0].id);
+interface SkillsProps {
+  skills?: TechnicalSkill[];
+}
+
+export const Skills: React.FC<SkillsProps> = ({ skills }) => {
+  const currentSkills = skills && skills.length > 0 ? skills : initialSkills;
+  const [selectedSkill, setSelectedSkill] = useState<string>(currentSkills[0]?.id || 'skill-pr');
 
   // Adobe signature badge abbreviations
   const adobeBadges: Record<string, { abbr: string; bg: string; text: string }> = {
@@ -48,7 +54,7 @@ export const Skills: React.FC = () => {
 
         {/* 4 Software Cards Grid with Card3D */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          {initialSkills.map((skill) => {
+          {currentSkills.map((skill) => {
             const isSelected = selectedSkill === skill.id;
             const badge = adobeBadges[skill.id] || { abbr: 'CC', bg: 'bg-[#071A35]', text: 'text-[#27DFFF]' };
             const IconComp = iconMap[skill.iconName] || Scissors;

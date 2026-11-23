@@ -24,7 +24,8 @@ import {
   RefreshCw,
   Search,
   Check,
-  Loader2
+  Loader2,
+  Wrench
 } from 'lucide-react';
 import {
   Profile,
@@ -32,10 +33,11 @@ import {
   ResumeData,
   SocialLink,
   ContactMessage,
-  WebsiteSettings
+  WebsiteSettings,
+  TechnicalSkill
 } from '../../types';
 import { StorageService } from '../../services/storageService';
-import { testSupabaseConnection } from '../../services/supabaseClient';
+import { testSupabaseConnection, getSupabaseClient } from '../../services/supabaseClient';
 import { ProjectEditorModal } from './ProjectEditorModal';
 import { PhotoManager } from './PhotoManager';
 import { VideoManager } from './VideoManager';
@@ -52,6 +54,7 @@ type TabType =
   | 'photos'
   | 'videos'
   | 'resume'
+  | 'skills'
   | 'social'
   | 'messages'
   | 'settings';
@@ -63,6 +66,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose, onLogou
   const [profile, setProfile] = useState<Profile | null>(null);
   const [projects, setProjects] = useState<Project[]>([]);
   const [resume, setResume] = useState<ResumeData | null>(null);
+  const [skills, setSkills] = useState<TechnicalSkill[]>([]);
   const [socialLinks, setSocialLinks] = useState<SocialLink[]>([]);
   const [messages, setMessages] = useState<ContactMessage[]>([]);
   const [settings, setSettings] = useState<WebsiteSettings | null>(null);
@@ -70,6 +74,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose, onLogou
   // UI helpers
   const [editingProject, setEditingProject] = useState<Project | null>(null);
   const [isEditorOpen, setIsEditorOpen] = useState(false);
+  const [isSkillEditorOpen, setIsSkillEditorOpen] = useState(false);
+  const [skillForm, setSkillForm] = useState<{ id?: string; software: string; category: string; description: string; iconName: string; topicsStr: string }>({
+    software: '',
+    category: '',
+    description: '',
+    iconName: 'Cpu',
+    topicsStr: ''
+  });
   const [saveAlert, setSaveAlert] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const [isSavingProfile, setIsSavingProfile] = useState(false);
   const [copiedSql, setCopiedSql] = useState(false);
@@ -78,12 +90,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose, onLogou
   const [newAdminPass, setNewAdminPass] = useState('');
   const [confirmAdminPass, setConfirmAdminPass] = useState('');
   const [passError, setPassError] = useState('');
+  const [supabaseSession, setSupabaseSession] = useState<{ email?: string } | null>(null);
+  const [sessionChecked, setSessionChecked] = useState(false);
 
   // Load all initial data
   const loadData = async () => {
     const p = await StorageService.getProfile();
     const pr = await StorageService.getAllProjectsAdmin();
     const r = await StorageService.getResume();
+    const sk = await StorageService.getSkills();
     const s = await StorageService.getSocialLinks();
     const m = await StorageService.getContactMessages();
     const st = await StorageService.getSettings();
@@ -91,6 +106,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose, onLogou
     setProfile(p);
     setProjects(pr);
     setResume(r);
+    setSkills(sk);
     setSocialLinks(s);
     setMessages(m);
     setSettings(st);
@@ -99,23 +115,45 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose, onLogou
   useEffect(() => {
     loadData();
 
+    // Verify Supabase Auth session status
+    const checkSession = async () => {
+      const supabase = getSupabaseClient();
+      if (supabase) {
+        try {
+          const { data } = await supabase.auth.getSession();
+          if (data?.session?.user) {
+            setSupabaseSession({ email: data.session.user.email });
+          } else {
+            setSupabaseSession(null);
+          }
+        } catch {
+          setSupabaseSession(null);
+        }
+      }
+      setSessionChecked(true);
+    };
+    checkSession();
+
     const handleUpdate = () => loadData();
     window.addEventListener('portfolio_profile_updated', handleUpdate);
     window.addEventListener('portfolio_projects_updated', handleUpdate);
     window.addEventListener('portfolio_resume_updated', handleUpdate);
+    window.addEventListener('portfolio_skills_updated', handleUpdate);
     window.addEventListener('portfolio_messages_updated', handleUpdate);
 
     return () => {
       window.removeEventListener('portfolio_profile_updated', handleUpdate);
       window.removeEventListener('portfolio_projects_updated', handleUpdate);
       window.removeEventListener('portfolio_resume_updated', handleUpdate);
+      window.removeEventListener('portfolio_skills_updated', handleUpdate);
       window.removeEventListener('portfolio_messages_updated', handleUpdate);
     };
   }, []);
 
   const showAlert = (message: string, type: 'success' | 'error' = 'success') => {
     setSaveAlert({ message, type });
-    setTimeout(() => setSaveAlert(null), 4000);
+    const duration = type === 'error' ? 8000 : 4000;
+    setTimeout(() => setSaveAlert(null), duration);
   };
 
   // PROFILE HANDLERS
@@ -197,6 +235,63 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose, onLogou
     }
   };
 
+  // SKILLS HANDLERS
+  const handleOpenSkillEditor = (skill?: TechnicalSkill) => {
+    if (skill) {
+      setSkillForm({
+        id: skill.id,
+        software: skill.software,
+        category: skill.category,
+        description: skill.description,
+        iconName: skill.iconName || 'Cpu',
+        topicsStr: skill.topics ? skill.topics.join(', ') : ''
+      });
+    } else {
+      setSkillForm({
+        software: '',
+        category: 'Color Grading & Editing',
+        description: '',
+        iconName: 'Cpu',
+        topicsStr: ''
+      });
+    }
+    setIsSkillEditorOpen(true);
+  };
+
+  const handleSaveSkill = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!skillForm.software.trim()) {
+      showAlert('Skill name / software is required', 'error');
+      return;
+    }
+    const topics = skillForm.topicsStr
+      .split(',')
+      .map(t => t.trim())
+      .filter(Boolean);
+
+    const skillToSave: TechnicalSkill = {
+      id: skillForm.id || `skill_${Date.now()}`,
+      software: skillForm.software.trim(),
+      category: skillForm.category.trim() || 'Software & Tools',
+      description: skillForm.description.trim(),
+      iconName: skillForm.iconName.trim() || 'Cpu',
+      topics
+    };
+
+    await StorageService.saveSkill(skillToSave);
+    setIsSkillEditorOpen(false);
+    showAlert('Technical skill updated and synced successfully!');
+    loadData();
+  };
+
+  const handleDeleteSkill = async (id: string) => {
+    if (window.confirm('Are you sure you want to delete this technical skill?')) {
+      await StorageService.deleteSkill(id);
+      showAlert('Technical skill deleted.');
+      loadData();
+    }
+  };
+
   // SOCIAL LINKS HANDLERS
   const handleSocialSave = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -275,6 +370,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose, onLogou
             <div>
               <div className="text-sm font-bold tracking-wide text-white">BHARATH S</div>
               <div className="text-[10px] uppercase font-semibold text-[#27DFFF]">Control Center</div>
+              {sessionChecked && (
+                <div className="mt-1 flex items-center space-x-1.5">
+                  <span className={`w-2 h-2 rounded-full ${supabaseSession ? 'bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)]' : 'bg-amber-400 shadow-[0_0_8px_rgba(251,191,36,0.8)]'}`} />
+                  <span className="text-[10px] text-slate-300 truncate max-w-[130px]">
+                    {supabaseSession ? (supabaseSession.email || 'Auth Active') : 'Offline Mode'}
+                  </span>
+                </div>
+              )}
             </div>
           </div>
 
@@ -364,6 +467,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose, onLogou
             </button>
 
             <button
+              onClick={() => setActiveTab('skills')}
+              className={`w-full flex items-center space-x-3 px-3 py-2.5 rounded-xl text-xs font-semibold uppercase tracking-wider transition-all ${
+                activeTab === 'skills'
+                  ? 'bg-[#168BFF]/25 text-[#27DFFF] border border-[#27DFFF]/40 shadow-[0_0_12px_rgba(39,223,255,0.2)]'
+                  : 'text-slate-200 hover:text-white hover:bg-white/5'
+              }`}
+            >
+              <Wrench className="w-4 h-4" />
+              <span>Skills Management</span>
+            </button>
+
+            <button
               onClick={() => setActiveTab('social')}
               className={`w-full flex items-center space-x-3 px-3 py-2.5 rounded-xl text-xs font-semibold uppercase tracking-wider transition-all ${
                 activeTab === 'social'
@@ -434,18 +549,39 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose, onLogou
         {/* Top Notification Toast */}
         {saveAlert && (
           <div
-            className={`fixed top-6 right-6 z-50 p-4 rounded-2xl border text-xs font-semibold flex items-center space-x-2.5 shadow-2xl animate-fadeIn ${
+            className={`fixed top-6 right-6 z-50 p-4 max-w-xl rounded-2xl border text-xs font-semibold flex items-start space-x-2.5 shadow-2xl animate-fadeIn ${
               saveAlert.type === 'success'
                 ? 'bg-emerald-500/20 border-emerald-400 text-emerald-200'
                 : 'bg-rose-500/20 border-rose-400 text-rose-200'
             }`}
           >
             {saveAlert.type === 'success' ? (
-              <CheckCircle className="w-5 h-5 text-emerald-300 flex-shrink-0" />
+              <CheckCircle className="w-5 h-5 text-emerald-300 flex-shrink-0 mt-0.5" />
             ) : (
-              <AlertCircle className="w-5 h-5 text-rose-300 flex-shrink-0" />
+              <AlertCircle className="w-5 h-5 text-rose-300 flex-shrink-0 mt-0.5" />
             )}
-            <span>{saveAlert.message}</span>
+            <span className="break-words flex-1 leading-relaxed">{saveAlert.message}</span>
+            <button
+              onClick={() => setSaveAlert(null)}
+              className="ml-2 text-slate-400 hover:text-white transition-colors"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        )}
+
+        {/* Supabase Session Warning Banner */}
+        {sessionChecked && !supabaseSession && (
+          <div className="mb-6 p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-200 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 shadow-lg animate-fadeIn">
+            <div className="flex items-start space-x-3">
+              <AlertCircle className="w-5 h-5 text-amber-400 flex-shrink-0 mt-0.5" />
+              <div>
+                <div className="text-xs font-bold text-amber-300">Offline / No Active Supabase Auth Session</div>
+                <div className="text-[11px] text-amber-200/80 leading-relaxed mt-0.5">
+                  You are logged into the local control panel, but there is no active Supabase Auth session. Changes will be cached locally, but direct Supabase database updates will be blocked by RLS policies until you sign in with your Supabase administrator credentials (<code className="bg-black/30 px-1 py-0.5 rounded text-[#27DFFF]">sbarath1605@gmail.com</code>).
+                </div>
+              </div>
+            </div>
           </div>
         )}
 
@@ -836,6 +972,160 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose, onLogou
                   Supports standard PDF documents. The public website will automatically link to and download this new document.
                 </p>
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* 6.5. TECHNICAL SKILLS MANAGEMENT TAB */}
+        {activeTab === 'skills' && (
+          <div className="space-y-6 max-w-4xl animate-fadeIn">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div>
+                <h2 className="text-2xl font-bold text-white">Technical Skills Management</h2>
+                <p className="text-xs text-slate-200 mt-1">
+                  Manage software competencies, tool expertise, categories, and specialization tags.
+                </p>
+              </div>
+
+              <button
+                onClick={() => handleOpenSkillEditor()}
+                className="inline-flex items-center space-x-2 px-5 py-2.5 rounded-full text-xs font-bold uppercase tracking-wider text-white bg-gradient-to-r from-[#168BFF] to-[#0879D1] hover:shadow-[0_0_15px_rgba(39,223,255,0.4)] transition-all"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Add New Skill</span>
+              </button>
+            </div>
+
+            {/* Skill Editor Modal / Inline Card */}
+            {isSkillEditorOpen && (
+              <form onSubmit={handleSaveSkill} className="glass-panel p-6 rounded-3xl border border-[#27DFFF]/40 shadow-[0_0_20px_rgba(39,223,255,0.15)] space-y-4">
+                <div className="flex items-center justify-between border-b border-[#168BFF]/20 pb-3">
+                  <h3 className="text-sm font-bold text-white">
+                    {skillForm.id ? 'Edit Technical Skill' : 'Create New Technical Skill'}
+                  </h3>
+                  <button
+                    type="button"
+                    onClick={() => setIsSkillEditorOpen(false)}
+                    className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-white/10"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-semibold text-slate-200">Software / Tool Name</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. DaVinci Resolve Studio"
+                      value={skillForm.software}
+                      onChange={(e) => setSkillForm({ ...skillForm, software: e.target.value })}
+                      required
+                      className="w-full px-4 py-2 rounded-xl bg-[#030B1C] border border-[#168BFF]/30 text-white text-xs"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-semibold text-slate-200">Category</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Color Grading &amp; Finishing"
+                      value={skillForm.category}
+                      onChange={(e) => setSkillForm({ ...skillForm, category: e.target.value })}
+                      required
+                      className="w-full px-4 py-2 rounded-xl bg-[#030B1C] border border-[#168BFF]/30 text-white text-xs"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-slate-200">Description</label>
+                  <textarea
+                    rows={2}
+                    placeholder="Brief description of your expertise with this software..."
+                    value={skillForm.description}
+                    onChange={(e) => setSkillForm({ ...skillForm, description: e.target.value })}
+                    className="w-full px-4 py-2 rounded-xl bg-[#030B1C] border border-[#168BFF]/30 text-white text-xs resize-none"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-slate-200">Topics &amp; Capabilities (comma-separated)</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Color Science, ACES Workflow, HDR Master, Film Emulation"
+                    value={skillForm.topicsStr}
+                    onChange={(e) => setSkillForm({ ...skillForm, topicsStr: e.target.value })}
+                    className="w-full px-4 py-2 rounded-xl bg-[#030B1C] border border-[#168BFF]/30 text-white text-xs"
+                  />
+                </div>
+
+                <div className="flex items-center justify-end space-x-3 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsSkillEditorOpen(false)}
+                    className="px-5 py-2 rounded-full text-xs font-semibold text-slate-300 hover:text-white bg-white/5 hover:bg-white/10"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-6 py-2 rounded-full text-xs font-bold uppercase tracking-wider text-white bg-gradient-to-r from-[#168BFF] to-[#0879D1]"
+                  >
+                    Save Skill
+                  </button>
+                </div>
+              </form>
+            )}
+
+            {/* Skills Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {skills.map((s) => (
+                <div
+                  key={s.id}
+                  className="glass-panel p-5 rounded-2xl border border-[#168BFF]/25 hover:border-[#27DFFF]/40 transition-all flex flex-col justify-between"
+                >
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="text-xs font-mono uppercase tracking-wider text-[#27DFFF] font-bold">
+                        {s.category}
+                      </div>
+                      <div className="flex items-center space-x-1.5">
+                        <button
+                          onClick={() => handleOpenSkillEditor(s)}
+                          className="p-1.5 rounded-lg bg-white/5 hover:bg-[#168BFF]/20 text-slate-200 hover:text-[#27DFFF]"
+                          title="Edit Skill"
+                        >
+                          <Edit className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          onClick={() => handleDeleteSkill(s.id)}
+                          className="p-1.5 rounded-lg bg-white/5 hover:bg-rose-500/20 text-slate-200 hover:text-rose-400"
+                          title="Delete Skill"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+
+                    <h4 className="text-base font-bold text-white mb-1.5">{s.software}</h4>
+                    <p className="text-xs text-slate-300 leading-relaxed mb-3">{s.description}</p>
+                  </div>
+
+                  {s.topics && s.topics.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5 pt-3 border-t border-[#168BFF]/15">
+                      {s.topics.map((topic, i) => (
+                        <span
+                          key={i}
+                          className="text-[10px] px-2 py-0.5 rounded-md bg-[#168BFF]/15 border border-[#168BFF]/30 text-[#27DFFF]"
+                        >
+                          {topic}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ))}
             </div>
           </div>
         )}

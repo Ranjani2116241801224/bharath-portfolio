@@ -8,21 +8,57 @@
 -- 1. SECURITY DEFINER HELPER: Check if current auth session belongs to an authorized admin
 CREATE OR REPLACE FUNCTION public.is_admin()
 RETURNS BOOLEAN
-LANGUAGE sql
+LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path = public
+SET search_path = public, auth
 STABLE
 AS $$
-  SELECT (
-    -- Direct JWT cryptographic claim: User's authenticated email is Bharath's email
-    LOWER(COALESCE(auth.jwt() ->> 'email', '')) IN ('sbarath1605@gmail.com', 'admin@bharaths.com')
-    OR
-    -- Database table check: User exists in admin_profiles with admin role
-    EXISTS (
-      SELECT 1 FROM public.admin_profiles
-      WHERE id = auth.uid() AND role IN ('admin', 'super_admin')
-    )
-  );
+DECLARE
+  v_uid UUID;
+  v_email TEXT;
+  v_is_admin BOOLEAN := FALSE;
+BEGIN
+  -- 1. Unauthenticated visitors are NEVER administrators
+  v_uid := auth.uid();
+  IF v_uid IS NULL THEN
+    RETURN FALSE;
+  END IF;
+
+  -- 2. Fast check: JWT email claim
+  BEGIN
+    v_email := LOWER(COALESCE(auth.jwt() ->> 'email', ''));
+    IF v_email IN ('sbarath1605@gmail.com', 'admin@bharaths.com') THEN
+      RETURN TRUE;
+    END IF;
+  EXCEPTION WHEN OTHERS THEN
+    -- Fall through if JWT claim parsing fails
+  END;
+
+  -- 3. Authoritative check: auth.users table lookup
+  BEGIN
+    SELECT LOWER(email) INTO v_email
+    FROM auth.users
+    WHERE id = v_uid;
+
+    IF v_email IN ('sbarath1605@gmail.com', 'admin@bharaths.com') THEN
+      -- Auto-repair: Ensure user exists in admin_profiles
+      INSERT INTO public.admin_profiles (id, role)
+      VALUES (v_uid, 'admin')
+      ON CONFLICT (id) DO NOTHING;
+      RETURN TRUE;
+    END IF;
+  EXCEPTION WHEN OTHERS THEN
+    -- Fall through if auth.users read is restricted
+  END;
+
+  -- 4. Role table check: public.admin_profiles
+  SELECT EXISTS (
+    SELECT 1 FROM public.admin_profiles
+    WHERE id = v_uid AND role IN ('admin', 'super_admin')
+  ) INTO v_is_admin;
+
+  RETURN COALESCE(v_is_admin, FALSE);
+END;
 $$;
 
 -- Grant execution permission on is_admin() to anon and authenticated roles
