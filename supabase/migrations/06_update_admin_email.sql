@@ -4,19 +4,27 @@
 -- to: sbharath16052@gmail.com
 -- ============================================================================
 
--- 1. Update public.profiles canonical record email
-UPDATE public.profiles
-SET 
-  email = 'sbharath16052@gmail.com',
-  updated_at = timezone('utc'::text, now())
-WHERE id = '00000000-0000-0000-0000-000000000001'::uuid;
+-- 1. Update public.profiles canonical record email (if table exists)
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'profiles') THEN
+    UPDATE public.profiles
+    SET 
+      email = 'sbharath16052@gmail.com',
+      updated_at = timezone('utc'::text, now())
+    WHERE id = '00000000-0000-0000-0000-000000000001'::uuid;
+  END IF;
 
--- 2. Update social_links email entry
-UPDATE public.social_links
-SET 
-  url = 'mailto:sbharath16052@gmail.com',
-  username = 'sbharath16052@gmail.com'
-WHERE platform = 'email' OR label = 'Email';
+  -- 2. Update social_links email entry (if table exists)
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'social_links') THEN
+    UPDATE public.social_links
+    SET 
+      url = 'mailto:sbharath16052@gmail.com',
+      username = 'sbharath16052@gmail.com'
+    WHERE platform = 'email' OR label = 'Email';
+  END IF;
+END;
+$$;
 
 -- 3. If an auth user with the old email exists in auth.users, update their email
 DO $$

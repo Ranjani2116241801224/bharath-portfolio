@@ -337,6 +337,13 @@ CREATE POLICY "Admin can manage admin profiles" ON public.admin_profiles FOR ALL
 CREATE POLICY "Public can view website settings" ON public.website_settings FOR SELECT USING (true);
 CREATE POLICY "Admin can manage website settings" ON public.website_settings FOR ALL TO authenticated USING (public.is_admin()) WITH CHECK (public.is_admin());
 
+-- Policies for skills
+ALTER TABLE public.skills ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Public can view skills" ON public.skills;
+DROP POLICY IF EXISTS "Admin can manage skills" ON public.skills;
+CREATE POLICY "Public can view skills" ON public.skills FOR SELECT USING (true);
+CREATE POLICY "Admin can manage skills" ON public.skills FOR ALL TO authenticated USING (public.is_admin()) WITH CHECK (public.is_admin());
+
 -- PART 3: STORAGE BUCKETS & STORAGE POLICIES
 INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
 VALUES
@@ -425,3 +432,55 @@ ON CONFLICT (id) DO NOTHING;
 INSERT INTO public.website_settings (id, use_supabase, connected)
 VALUES ('primary_settings', true, true)
 ON CONFLICT (id) DO NOTHING;
+
+-- Seed initial technical skills
+INSERT INTO public.skills (id, software, category, description, icon_name, topics, display_order)
+VALUES
+  ('skill_davinci', 'DaVinci Resolve Studio', 'Color Grading & Finishing', 'Industry standard color grading, node-based workflows, ACES color management, and HDR finishing.', 'Video', ARRAY['Color Science', 'Node Workflows', 'ACES', 'HDR Master', 'Film Emulation'], 1),
+  ('skill_premiere', 'Adobe Premiere Pro', 'Non-Linear Editing (NLE)', 'Timeline pacing, multi-camera editing, dynamic transitions, audio ducking, and proxy workflows.', 'Film', ARRAY['Timeline Pacing', 'Multi-Cam Editing', 'Audio Ducking', 'Proxy Workflow'], 2),
+  ('skill_aftereffects', 'Adobe After Effects', 'VFX & Motion Graphics', 'Visual effects compositing, motion tracking, particle systems, 3D camera tracker, and lower thirds.', 'Sparkles', ARRAY['Motion Tracking', '3D Camera', 'Compositing', 'Keyframing'], 3),
+  ('skill_photoshop', 'Adobe Photoshop', 'Thumbnail & Graphic Design', 'Key art design, visual manipulation, custom title cards, thumbnail optimization, and grading LUTs.', 'Image', ARRAY['Key Art', 'Visual Retouching', 'Color Grading LUTs', 'Graphic Assets'], 4),
+  ('skill_audition', 'Adobe Audition', 'Audio Post-Production', 'Sound design, noise cancellation, vocal EQ, parametric compression, and stereo mastering.', 'Music', ARRAY['Audio Mastering', 'Noise Removal', 'Stereo Balancing', 'Vocal Enhancement'], 5)
+ON CONFLICT (id) DO NOTHING;
+
+-- Realtime publication registration (safe & idempotent)
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_publication_tables 
+    WHERE pubname = 'supabase_realtime' AND schemaname = 'public' AND tablename = 'profiles'
+  ) THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.profiles;
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_publication_tables 
+    WHERE pubname = 'supabase_realtime' AND schemaname = 'public' AND tablename = 'projects'
+  ) THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.projects;
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_publication_tables 
+    WHERE pubname = 'supabase_realtime' AND schemaname = 'public' AND tablename = 'project_media'
+  ) THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.project_media;
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_publication_tables 
+    WHERE pubname = 'supabase_realtime' AND schemaname = 'public' AND tablename = 'social_links'
+  ) THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.social_links;
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_publication_tables 
+    WHERE pubname = 'supabase_realtime' AND schemaname = 'public' AND tablename = 'resumes'
+  ) THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.resumes;
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_publication_tables 
+    WHERE pubname = 'supabase_realtime' AND schemaname = 'public' AND tablename = 'skills'
+  ) THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.skills;
+  END IF;
+END;
+$$;
