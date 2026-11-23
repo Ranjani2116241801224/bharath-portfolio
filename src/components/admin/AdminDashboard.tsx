@@ -578,7 +578,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose, onLogou
               <div>
                 <div className="text-xs font-bold text-amber-300">Offline / No Active Supabase Auth Session</div>
                 <div className="text-[11px] text-amber-200/80 leading-relaxed mt-0.5">
-                  You are logged into the local control panel, but there is no active Supabase Auth session. Changes will be cached locally, but direct Supabase database updates will be blocked by RLS policies until you sign in with your Supabase administrator credentials (<code className="bg-black/30 px-1 py-0.5 rounded text-[#27DFFF]">sbarath1605@gmail.com</code>).
+                  You are logged into the local control panel, but there is no active Supabase Auth session. Changes will be cached locally, but direct Supabase database updates will be blocked by RLS policies until you sign in with your Supabase administrator credentials (<code className="bg-black/30 px-1 py-0.5 rounded text-[#27DFFF]">sbharath16052@gmail.com</code>).
                 </div>
               </div>
             </div>

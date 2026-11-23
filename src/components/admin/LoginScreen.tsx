@@ -47,7 +47,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess, onClos
               .eq('id', data.user.id)
               .maybeSingle();
 
-            const isAuthorizedEmail = cleanEmail === 'sbarath1605@gmail.com' || cleanEmail === 'admin@bharaths.com';
+            const isAuthorizedEmail = cleanEmail === 'sbharath16052@gmail.com' || cleanEmail === 'sbarath1605@gmail.com' || cleanEmail === 'admin@bharaths.com';
             if (adminProfile?.role === 'admin' || adminProfile?.role === 'super_admin' || isAuthorizedEmail) {
               localStorage.setItem('bharath_admin_auth', 'true');
               localStorage.setItem('bharath_auth_token', data.session.access_token);
@@ -64,7 +64,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess, onClos
 
           if (authError) {
             console.warn('Supabase Auth signIn error:', authError);
-            const isAuthorizedEmail = cleanEmail === 'sbarath1605@gmail.com' || cleanEmail === 'admin@bharaths.com';
+            const isAuthorizedEmail = cleanEmail === 'sbharath16052@gmail.com' || cleanEmail === 'sbarath1605@gmail.com' || cleanEmail === 'admin@bharaths.com';
             
             // If authorized email and credentials were not found, try auto sign-up in Supabase Auth
             if (isAuthorizedEmail && authError.message?.toLowerCase().includes('invalid login credentials')) {

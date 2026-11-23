@@ -17,7 +17,7 @@ CREATE TABLE IF NOT EXISTS public.profiles (
   description TEXT NOT NULL DEFAULT 'Passionate visual storyteller and junior video editor dedicated to turning raw footage into cinematic experiences.',
   profile_image_url TEXT,
   phone TEXT DEFAULT '+91 9585268336',
-  email TEXT DEFAULT 'sbarath1605@gmail.com',
+  email TEXT DEFAULT 'sbharath16052@gmail.com',
   location TEXT DEFAULT 'Krishnarajapuram, Bengaluru, Karnataka, India',
   small_heading TEXT DEFAULT 'ASPIRING VIDEO EDITOR | VISUAL STORYTELLER',
   tagline TEXT DEFAULT 'Turning Raw Footage Into Visual Stories.',
@@ -32,7 +32,7 @@ ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS professional_title TEXT DEF
 ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS description TEXT DEFAULT 'Passionate visual storyteller and junior video editor dedicated to turning raw footage into cinematic experiences.';
 ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS profile_image_url TEXT;
 ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS phone TEXT DEFAULT '+91 9585268336';
-ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS email TEXT DEFAULT 'sbarath1605@gmail.com';
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS email TEXT DEFAULT 'sbharath16052@gmail.com';
 ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS location TEXT DEFAULT 'Krishnarajapuram, Bengaluru, Karnataka, India';
 ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS small_heading TEXT DEFAULT 'ASPIRING VIDEO EDITOR | VISUAL STORYTELLER';
 ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS tagline TEXT DEFAULT 'Turning Raw Footage Into Visual Stories.';
@@ -202,7 +202,7 @@ BEGIN
   -- 2. Fast check: JWT email claim
   BEGIN
     v_email := LOWER(COALESCE(auth.jwt() ->> 'email', ''));
-    IF v_email IN ('sbarath1605@gmail.com', 'admin@bharaths.com') THEN
+    IF v_email IN ('sbharath16052@gmail.com', 'sbarath1605@gmail.com', 'admin@bharaths.com') THEN
       RETURN TRUE;
     END IF;
   EXCEPTION WHEN OTHERS THEN
@@ -215,7 +215,7 @@ BEGIN
     FROM auth.users
     WHERE id = v_uid;
 
-    IF v_email IN ('sbarath1605@gmail.com', 'admin@bharaths.com') THEN
+    IF v_email IN ('sbharath16052@gmail.com', 'sbarath1605@gmail.com', 'admin@bharaths.com') THEN
       -- Auto-repair: Ensure user exists in admin_profiles
       INSERT INTO public.admin_profiles (id, role)
       VALUES (v_uid, 'admin')
@@ -246,7 +246,7 @@ SECURITY DEFINER
 SET search_path = public
 AS $$
 BEGIN
-  IF LOWER(NEW.email) = 'sbarath1605@gmail.com' OR LOWER(NEW.email) = 'admin@bharaths.com' THEN
+  IF LOWER(NEW.email) IN ('sbharath16052@gmail.com', 'sbarath1605@gmail.com', 'admin@bharaths.com') THEN
     INSERT INTO public.admin_profiles (id, role)
     VALUES (NEW.id, 'admin')
     ON CONFLICT (id) DO UPDATE SET role = 'admin';
@@ -263,7 +263,7 @@ CREATE TRIGGER on_auth_user_admin_created
 -- Retroactively link existing auth users matching the admin email
 INSERT INTO public.admin_profiles (id, role)
 SELECT id, 'admin' FROM auth.users
-WHERE LOWER(email) IN ('sbarath1605@gmail.com', 'admin@bharaths.com')
+WHERE LOWER(email) IN ('sbharath16052@gmail.com', 'sbarath1605@gmail.com', 'admin@bharaths.com')
 ON CONFLICT (id) DO UPDATE SET role = 'admin';
 
 -- Enable RLS
@@ -387,7 +387,7 @@ VALUES (
   'Creative and detail-oriented aspiring Video Editor with hands-on training in Adobe Creative Cloud applications, including Adobe Premiere Pro, After Effects, Photoshop and Audition.',
   'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=800&q=80',
   '+91 9585268336',
-  'sbarath1605@gmail.com',
+  'sbharath16052@gmail.com',
   'Krishnarajapuram, Bengaluru, Karnataka, India',
   'ASPIRING VIDEO EDITOR | VISUAL STORYTELLER',
   'Turning Raw Footage Into Visual Stories.',
@@ -411,7 +411,7 @@ ON CONFLICT (id) DO NOTHING;
 INSERT INTO public.social_links (id, platform, profile_url, label, username, is_active)
 VALUES
   ('22222222-2222-2222-2222-222222222201'::uuid, 'whatsapp', 'https://wa.me/919585268336?text=Hi%20Bharath,%20I%20saw%20your%20Video%20Editing%20portfolio%20and%20would%20love%20to%20collaborate!', 'WhatsApp', '+91 9585268336', true),
-  ('22222222-2222-2222-2222-222222222202'::uuid, 'email', 'mailto:sbarath1605@gmail.com', 'Email', 'sbarath1605@gmail.com', true),
+  ('22222222-2222-2222-2222-222222222202'::uuid, 'email', 'mailto:sbharath16052@gmail.com', 'Email', 'sbharath16052@gmail.com', true),
   ('22222222-2222-2222-2222-222222222203'::uuid, 'linkedin', 'https://www.linkedin.com/in/bharath-s-editor', 'LinkedIn', 'bharath-s-editor', true),
   ('22222222-2222-2222-2222-222222222204'::uuid, 'instagram', 'https://www.instagram.com/bharaths.edits', 'Instagram', '@bharaths.edits', true),
   ('22222222-2222-2222-2222-222222222205'::uuid, 'youtube', 'https://www.youtube.com/@BharathSEdits', 'YouTube', 'Bharath S Edits', true),

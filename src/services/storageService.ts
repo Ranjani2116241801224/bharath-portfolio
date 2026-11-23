@@ -147,7 +147,7 @@ export const StorageService = {
 
       if (!currentSession || !currentUser) {
         throw new Error(
-          'Supabase Auth session not found. You are not logged in with an active Supabase session. Please sign in with administrator credentials (sbarath1605@gmail.com) to save changes to the database.'
+          'Supabase Auth session not found. You are not logged in with an active Supabase session. Please sign in with administrator credentials (sbharath16052@gmail.com) to save changes to the database.'
         );
       }
 
@@ -879,7 +879,7 @@ export const StorageService = {
             .maybeSingle();
 
           // If admin_profiles record exists with role 'admin' or if authorized admin email
-          const isAuthorizedEmail = cleanEmail === 'sbarath1605@gmail.com' || cleanEmail === 'admin@bharaths.com';
+          const isAuthorizedEmail = cleanEmail === 'sbharath16052@gmail.com' || cleanEmail === 'sbarath1605@gmail.com' || cleanEmail === 'admin@bharaths.com';
           if (adminProfile?.role === 'admin' || adminProfile?.role === 'super_admin' || isAuthorizedEmail) {
             localStorage.setItem('bharath_admin_auth', 'true');
             localStorage.setItem('bharath_auth_token', data.session.access_token);
@@ -906,7 +906,7 @@ export const StorageService = {
       }
     }
 
-    const isAuthorizedEmail = cleanEmail === 'sbarath1605@gmail.com' || cleanEmail === 'admin@bharaths.com';
+    const isAuthorizedEmail = cleanEmail === 'sbharath16052@gmail.com' || cleanEmail === 'sbarath1605@gmail.com' || cleanEmail === 'admin@bharaths.com';
     const isAuthorizedPass = pass === (storedPass || 'Bharath@2026');
 
     if (isAuthorizedEmail && isAuthorizedPass) {

@@ -20,7 +20,7 @@ export const initialProfile: Profile = {
   profileImage: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=800&q=80',
   location: 'Krishnarajapuram, Bengaluru, Karnataka, India',
   phone: '+91 9585268336',
-  email: 'sbarath1605@gmail.com',
+  email: 'sbharath16052@gmail.com',
   vision: 'To begin my career as a Junior Video Editor in a creative media or digital marketing company where I can develop my editing skills, contribute to creative projects and grow professionally.'
 };
 
@@ -323,8 +323,8 @@ export const initialSocialLinks: SocialLink[] = [
     id: 'soc-email',
     platform: 'email',
     label: 'Email',
-    url: 'mailto:sbarath1605@gmail.com',
-    username: 'sbarath1605@gmail.com',
+    url: 'mailto:sbharath16052@gmail.com',
+    username: 'sbharath16052@gmail.com',
     isActive: true
   },
   {

@@ -28,7 +28,7 @@ ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS professional_title TEXT DEF
 ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS description TEXT DEFAULT 'Passionate visual storyteller and junior video editor dedicated to turning raw footage into cinematic experiences.';
 ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS profile_image_url TEXT;
 ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS phone TEXT DEFAULT '+91 9585268336';
-ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS email TEXT DEFAULT 'sbarath1605@gmail.com';
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS email TEXT DEFAULT 'sbharath16052@gmail.com';
 ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS location TEXT DEFAULT 'Krishnarajapuram, Bengaluru, Karnataka, India';
 ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS small_heading TEXT DEFAULT 'ASPIRING VIDEO EDITOR | VISUAL STORYTELLER';
 ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS tagline TEXT DEFAULT 'Turning Raw Footage Into Visual Stories.';
@@ -58,7 +58,7 @@ VALUES (
   'Passionate visual storyteller and junior video editor dedicated to turning raw footage into cinematic experiences.',
   'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=800&q=80',
   '+91 9585268336',
-  'sbarath1605@gmail.com',
+  'sbharath16052@gmail.com',
   'Krishnarajapuram, Bengaluru, Karnataka, India',
   'ASPIRING VIDEO EDITOR | VISUAL STORYTELLER',
   'Turning Raw Footage Into Visual Stories.',
@@ -101,7 +101,7 @@ BEGIN
   -- 3. Fast check: JWT email claim
   BEGIN
     v_email := LOWER(COALESCE(auth.jwt() ->> 'email', ''));
-    IF v_email IN ('sbarath1605@gmail.com', 'admin@bharaths.com') THEN
+    IF v_email IN ('sbharath16052@gmail.com', 'sbarath1605@gmail.com', 'admin@bharaths.com') THEN
       RETURN TRUE;
     END IF;
   EXCEPTION WHEN OTHERS THEN
@@ -114,7 +114,7 @@ BEGIN
     FROM auth.users
     WHERE id = v_uid;
 
-    IF v_email IN ('sbarath1605@gmail.com', 'admin@bharaths.com') THEN
+    IF v_email IN ('sbharath16052@gmail.com', 'sbarath1605@gmail.com', 'admin@bharaths.com') THEN
       -- Auto-repair: Ensure user exists in admin_profiles
       INSERT INTO public.admin_profiles (id, role)
       VALUES (v_uid, 'admin')
@@ -145,7 +145,7 @@ SECURITY DEFINER
 SET search_path = public, auth
 AS $$
 BEGIN
-  IF LOWER(NEW.email) IN ('sbarath1605@gmail.com', 'admin@bharaths.com') OR NEW.id = 'e2de21ab-3253-4692-a875-cd733ba3de4d'::uuid THEN
+  IF LOWER(NEW.email) IN ('sbharath16052@gmail.com', 'sbarath1605@gmail.com', 'admin@bharaths.com') OR NEW.id = 'e2de21ab-3253-4692-a875-cd733ba3de4d'::uuid THEN
     INSERT INTO public.admin_profiles (id, role)
     VALUES (NEW.id, 'admin')
     ON CONFLICT (id) DO UPDATE SET role = 'admin';
@@ -162,7 +162,7 @@ CREATE TRIGGER on_auth_user_admin_created
 -- Retroactively populate admin_profiles from existing auth.users
 INSERT INTO public.admin_profiles (id, role)
 SELECT id, 'admin' FROM auth.users
-WHERE LOWER(email) IN ('sbarath1605@gmail.com', 'admin@bharaths.com') OR id = 'e2de21ab-3253-4692-a875-cd733ba3de4d'::uuid
+WHERE LOWER(email) IN ('sbharath16052@gmail.com', 'sbarath1605@gmail.com', 'admin@bharaths.com') OR id = 'e2de21ab-3253-4692-a875-cd733ba3de4d'::uuid
 ON CONFLICT (id) DO UPDATE SET role = 'admin';
 
 -- 6. Clean and Recreate RLS on public.profiles

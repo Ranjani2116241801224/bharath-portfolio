@@ -116,7 +116,7 @@ export const Footer: React.FC<FooterProps> = ({ socialLinks, onOpenAdmin }) => {
             <div className="space-y-1.5 text-xs text-slate-200">
               <div>Krishnarajapuram, Bengaluru, Karnataka, India</div>
               <div className="text-white font-medium">+91 9585268336</div>
-              <div className="text-[#27DFFF] font-medium break-all">sbarath1605@gmail.com</div>
+              <div className="text-[#27DFFF] font-medium break-all">sbharath16052@gmail.com</div>
             </div>
 
             <button
